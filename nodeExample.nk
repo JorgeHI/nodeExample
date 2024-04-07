@@ -1,0 +1,154 @@
+set cut_paste_input [stack 0]
+version 15.0 v3
+push $cut_paste_input
+NoOp {
+ name NodeExample1
+ knobChanged "k = nuke.thisKnob()\nn = nuke.thisNode()\n# ReadKnob tab\nif k.name() == \"source\":  # Update the visible source knob\n    for knob in nuke.thisNode().knobs():\n        if knob.endswith(\"_src\"):\n            n\[knob].setVisible(False)#.setFlag(nuke.INVISIBLE)\n    n\[k.value() + \"_src\"].setVisible(True)#.clearFlag(nuke.INVISIBLE)\n    n\[\"knobType\"].setValue(n\[k.value() + \"_src\"].Class())\n# Update the value with all the methods\nsrcK = n\[n\[\"source\"].value() + \"_src\"] \nif k.name() in \[srcK.name(), \"frame\", \"source\"]:\n    n\[\"value\"].setValue(str(srcK.value()))\n    n\[\"getValue\"].setValue(str(srcK.getValue()))\n    n\[\"getValueAt\"].setValue(str(srcK.getValueAt(n\[\"frame\"].value())))\n    # TODO use the evaluate method we need to save and restore the current source value without evaluate\n    currentV = srcK.toScript() if srcK.Class() in \[\"EvalString_Knob\", \"File_Knob\"] else srcK.value()\n    try:\n        n\[\"evaluate\"].setValue(srcK.evaluate())  # Try to evaluate, might be unsuported in the knob\n    except Exception as e:\n        n\[\"evaluate\"].setValue(\"-Not Supported-\")\n    srcK.setValue(currentV)  # Restore the value\n    \n    n\[\"toScript\"].setValue(srcK.toScript())\n"
+ updateUI "# ReadKnob Tab\nn = nuke.thisNode()\nif n.shown(): # Only execute the preview if the Props panel is currently open\n    # UI Tab\n    # dynamic text preview\n    n\[\"dynamicTextPreview\"].setValue(\"Dynamic Text Preview - Frame: \{0\}\".format(nuke.frame()))\n    # dynamic tcl preview\n    n\[\"dynamicTclPreview\"].setValue(n\[\"dynamicTclValue\"].value())\n"
+ selected true
+ xpos -525
+ ypos -161
+ addUserKnob {20 tab l Knobs}
+ addUserKnob {20 "" n -2}
+ addUserKnob {20 subTab_createKnob l "Knob Creation"}
+ addUserKnob {4 createKnob_type l Type M {AColor_Knob Array_Knob Axis_Knob BBox_Knob Bitmask_Knob Boolean_Knob Box3_Knob CascadingEnumeration_Knob Channel_Knob ColorChip_Knob Color_Knob Disable_Knob Double_Knob EditableEnumeration_Knob Enumeration_Knob EvalString_Knob Eyedropper_Knob File_Knob Font_Knob Format_Knob FreeType_Knob Help_Knob Histogram_Knob IArray_Knob Int_Knob Keyer_Knob Link_Knob MultiView_Knob Multiline_Eval_String_Knob OneView_Knob ParticleChannels_Knob Password_Knob Pulldown_Knob PyScript_Knob Radio_Knob Range_Knob Scale_Knob SceneGraph_Knob SceneView_Knob Script_Knob String_Knob Text_Knob Transform2d_Knob UV_Knob Unsigned_Knob ViewView_Knob WH_Knob XYZ_Knob XY_Knob}}
+ createKnob_type BBox_Knob
+ addUserKnob {22 createKnob_type_refresh l Refresh t "Updates the knob list from the current existing knobs in this tab." -STARTLINE T "n = nuke.thisNode()\n\nelements = \[]\nfor k in n.allKnobs():\n    if k.name().endswith(\"_Knob\"):\n        elements.append(k.name())\nelements.sort()\nn\[\"createKnob_type\"].setValues(elements)"}
+ addUserKnob {22 createKnob_create l Create t "Creates a knob of the selected type in the current selected nodes. It shows a dialogs asking for basic information first." T "import ast\nimport inspect\nimport logging\nn = nuke.thisNode()\nlogger = logging.getLogger(n.name())\n\ndestNodes = nuke.selectedNodes()\nkType = n\[\"createKnob_type\"].value()\n\nkClass = None\nfor m in inspect.getmembers(nuke, inspect.isclass):\n    if m\[0] == kType:\n        kClass = m\[1]\n        break\nif kClass is None:\n    nuke.message(f\"The class \\\"\{kType\}\\\" doesn't exist in the Nuke Module.\")\nelse:\n    p = nuke.Panel(f'Knob Creation - \{kType\}')\n    p.addSingleLineInput('Name', kType)\n    p.addSingleLineInput('Label', kType)\n    if kType == \"Pulldown_Knob\":\n        p.addMultilineTextInput('Items', '\"Example1\":\"1\", \"Example2\":\"e\"')\n    elif kClass.__bases__\[0].__name__ == \"Enumeration_Knob\" or kType == \"Enumeration_Knob\":\n        p.addMultilineTextInput('Items', 'Example1\\nExample2')\n    elif kType in \[\"SceneGraph_Knob\"]:\n        p.addMultilineTextInput('Items', '\[(\"name1\", \"type1\"), (\"name2\", \"type2\"), (\"name2/name3\", \"type3\")]')\n    elif kType in \[\"SceneView_Knob\"]:\n        p.addMultilineTextInput('Items', '\[(\"name1\")]')\n    # Target Nodes\n    nodeList = \[sn.name() for sn in destNodes]\n    nodeList.remove(n.name())\n    p.addMultilineTextInput('Target Nodes', \"\\n\".join(nodeList))\n    ret = p.show()\n    # Read\n    if ret == 1:\n        targetNodes = \[nuke.toNode(tn) for tn in p.value('Target Nodes').split(\"\\n\")]\n        knobName = p.value('Name')\n        knobLabel = p.value('Label')\n        items = None\n        if kType in \[\"Pulldown_Knob\", \"SceneGraph_Knob\", \"SceneView_Knob\"]:\n            items = ast.literal_eval(p.value('Items'))\n        elif kClass.__bases__\[0].__name__ == \"Enumeration_Knob\" or kType == \"Enumeration_Knob\":\n            items = p.value('Items').split(\"\\n\")\n        \n        for tn in targetNodes:\n            if tn.name() == n.name():\n                continue  # Skip this node\n            if items is None:\n                newKnob = kClass(knobName, knobLabel)\n            else:\n                newKnob = kClass(knobName, knobLabel, items)\n            tn.addKnob(newKnob)\n    else:\n        logger.info(\"Operation canceled\")\n        \n" +STARTLINE}
+ addUserKnob {20 "" n -3}
+ addUserKnob {26 enumeration_knobs_section l "-- Enumeration Knobs --"}
+ addUserKnob {35 Pulldown_Knob M {Example1 1 Example2 e ""}}
+ addUserKnob {4 Enumeration_Knob M {Example1 Example2}}
+ Enumeration_Knob Example2
+ addUserKnob {4 Bitmask_Knob M {Example1 Example2}}
+ addUserKnob {85 EditableEnumeration_Knob M {Example1 Example2}}
+ addUserKnob {68 CascadingEnumeration_Knob M {Example1 Example2}}
+ addUserKnob {83 Radio_Knob M {Example1 Example2}}
+ addUserKnob {26 string_knobs_section l "-- String Knobs --"}
+ addUserKnob {2 File_Knob}
+ addUserKnob {1 EvalString_Knob}
+ addUserKnob {1 String_Knob}
+ addUserKnob {61 Password_Knob}
+ addUserKnob {84 FreeType_Knob}
+ addUserKnob {43 Multiline_Eval_String_Knob}
+ addUserKnob {26 basic_knobs_section l "-- Basic Knobs --"}
+ addUserKnob {6 Boolean_Knob +STARTLINE}
+ addUserKnob {3 Int_Knob}
+ addUserKnob {78 IArray_Knob n 1}
+ addUserKnob {78 Array_Knob n 1}
+ addUserKnob {78 Range_Knob n 1}
+ addUserKnob {78 Unsigned_Knob n 1}
+ addUserKnob {7 Double_Knob}
+ addUserKnob {26 Text_Knob}
+ addUserKnob {26 node_knobs_section l "-- Node Knobs --"}
+ addUserKnob {80 Disable_Knob +STARTLINE}
+ addUserKnob {26 color_knobs_section l "-- Color Knobs --"}
+ addUserKnob {18 Color_Knob}
+ Color_Knob {0 0 0}
+ addUserKnob {6 Color_Knob_panelDropped l "panel dropped state" +HIDDEN +STARTLINE}
+ addUserKnob {19 AColor_Knob}
+ AColor_Knob {0 0 0 0}
+ addUserKnob {6 AColor_Knob_panelDropped l "panel dropped state" -STARTLINE +HIDDEN}
+ addUserKnob {11 Channel_Knob}
+ addUserKnob {40 ColorChip_Knob -STARTLINE}
+ addUserKnob {26 box_knobs_section l "-- Box Knobs --"}
+ addUserKnob {15 BBox_Knob}
+ addUserKnob {31 Box3_Knob}
+ addUserKnob {26 buttons_knobs_section l "-- Button Knobs --"}
+ addUserKnob {22 PyScript_Knob +STARTLINE}
+ addUserKnob {32 Script_Knob +STARTLINE}
+ addUserKnob {26 transforms_knobs_section l "-- Transform & 3D Knobs --"}
+ addUserKnob {29 Axis_Knob}
+ addUserKnob {60 file_menu l @FolderIcon}
+ addUserKnob {60 snap_menu l @AxisIcon -STARTLINE}
+ addUserKnob {4 xform_order l "Transform Order" t "Specifies the order to apply the transformations in. Options are:\nSRT\tScale/Rotation/Translation\nSRT\tScale/Translation/Rotation\nRST\tRotation/Scale/Translation\nRTS\tRotation/Translation/Scale\nTSR\tTranslation/Scale/Rotation\nTRS\tTranslation/Rotation/Scale\n" M {SRT STR RST RTS TSR TRS}}
+ addUserKnob {4 rot_order l "Rotation Order" t "Specifies the order to apply Euler angles to the rotation." M {XYZ XZY YXZ YZX ZXY ZYX}}
+ addUserKnob {13 translate l Translate}
+ addUserKnob {13 rotate l Rotate}
+ addUserKnob {78 scaling l Scale R 0 10 n 3}
+ addUserKnob {7 uniform_scale l "Uniform Scale" R 0.01 10}
+ addUserKnob {13 skew l Skew}
+ addUserKnob {13 pivot_translate l "Pivot Translate"}
+ addUserKnob {13 pivot_rotate l "Pivot Rotate"}
+ addUserKnob {20 "" l "Local Matrix" n 2}
+ addUserKnob {6 useMatrix l "Specify Matrix" t "Enable this option to manually specify all of the values for the local matrix applied to this op, or to expression link the local matrix to another op's matrix. Enabling this option disables the individual knobs above." +STARTLINE}
+ addUserKnob {78 matrix l "" t "The Local matrix applies a matrix to this op relative to the transformation of the input op." +STARTLINE +DISABLED n 4}
+ addUserKnob {20 "" -STARTLINE n -1}
+ addUserKnob {0 import_chan +INVISIBLE}
+ addUserKnob {0 export_chan +INVISIBLE}
+ addUserKnob {0 pivot +INVISIBLE T pivot_translate}
+ addUserKnob {0 Eyedropper_Knob +INVISIBLE}
+ addUserKnob {0 Font_Knob +INVISIBLE}
+ addUserKnob {0 Help_Knob +INVISIBLE}
+ addUserKnob {0 Histogram_Knob +INVISIBLE}
+ addUserKnob {0 Transform2d_Knob +INVISIBLE}
+ addUserKnob {0 ViewView_Knob +INVISIBLE}
+ addUserKnob {78 Scale_Knob R 0 10 n 3}
+ addUserKnob {30 UV_Knob}
+ addUserKnob {13 XYZ_Knob}
+ addUserKnob {12 XY_Knob}
+ addUserKnob {14 WH_Knob R 0 100}
+ addUserKnob {26 other_knobs_section l "-- Other Knobs --"}
+ addUserKnob {17 Format_Knob}
+ addUserKnob {78 Keyer_Knob n 4}
+ addUserKnob {41 Link_Knob}
+ addUserKnob {45 MultiView_Knob}
+ addUserKnob {4 OneView_Knob M {Example1 Example2}}
+ addUserKnob {87 ParticleChannels_Knob}
+ addUserKnob {88 SceneGraph_Knob}
+ SceneGraph_Knob {{0} version: 1 + name1 + name2}
+ addUserKnob {75 SceneView_Knob}
+ SceneView_Knob {{0} imported: 0 selected:}
+ addUserKnob {20 ReadKnob t "Example of each available knob method to read the value, for each knob type."}
+ addUserKnob {4 source t "The knob to check the value methods from" M {filename string integer double pulldown "" "" "" "" "" "" ""}}
+ addUserKnob {3 frame t "The frame to evaluate in getValueAt" -STARTLINE}
+ addUserKnob {1 knobType l "Knob Type" t "The knob class name" -STARTLINE +DISABLED}
+ knobType File_Knob
+ addUserKnob {4 pulldown_src l pulldown +HIDDEN M {loc1 loc2 loc3 example4 ""}}
+ pulldown_src example4
+ addUserKnob {3 integer_src l integer +HIDDEN}
+ addUserKnob {7 double_src l double +HIDDEN}
+ double_src 0.08
+ addUserKnob {2 filename_src l filename}
+ filename_src "E:/testing/\[value input.name]/\[frame]/myFile.%04d.exr"
+ addUserKnob {1 string_src l string +HIDDEN}
+ string_src "Frame: \[frame] - Input '\[value input0.name]'"
+ addUserKnob {1 value +DISABLED}
+ value "E:/testing/\[value input.name]/\[frame]/myFile.%04d.exr"
+ addUserKnob {1 getValue +DISABLED}
+ getValue "E:/testing/\[value input.name]/\[frame]/myFile.%04d.exr"
+ addUserKnob {1 getValueAt +DISABLED}
+ getValueAt 0.0
+ addUserKnob {1 evaluate +DISABLED}
+ evaluate E:/testing/Roto1/55/myFile.0055.exr
+ addUserKnob {1 toScript +DISABLED}
+ toScript "E:/testing/\[value input.name]/\[frame]/myFile.%04d.exr"
+ addUserKnob {20 ui l UI}
+ addUserKnob {26 dynamicTextPreview l "" +STARTLINE T "Dynamic Text Preview - Frame: 1"}
+ addUserKnob {22 howtoDynamicTextPreview l "<img src=\"Modify.png\" width=\"10\">" t "Shows the requiredments to implement this preview" -STARTLINE T "p = nuke.Panel('How to Make a text preview')\np.addSingleLineInput(\"Knob\", \"updateUI\")\np.addNotepad(\"Code\", \"n = nuke.thisNode()\\nif n.shown(): # Only execute the preview if the Props panel is currently open\\n    text = \\\"Dynamic Text Preview - Frame: \{0\}\\\".format(nuke.frame())\\n    n\[\\\"dynamicTextPreview\\\"].setValue(text)\")\np.addNotepad(\"Explanation\", \"Add a code in the updateUI knob to update the Node's properties tab each time something changes. In this example, update the frame number in a text label.\")\nret = p.show()"}
+ addUserKnob {26 ""}
+ addUserKnob {1 dynamicTclValue l "TCL Value"}
+ dynamicTclValue "Frame: \[frame]"
+ addUserKnob {26 dynamicTclPreview l "TCL Preview" T "Frame: 1"}
+ addUserKnob {22 howtoDynamicTclPreview l "<img src=\"Modify.png\" width=\"10\">" t "Shows the requiredments to implement this preview" -STARTLINE T "p = nuke.Panel('How to Make a TCL preview')\np.addSingleLineInput(\"Knob\", \"updateUI\")\np.addNotepad(\"Code\", \"n = nuke.thisNode()\\nif n.shown(): # Only execute the preview if the Props panel is currently open\\n    n\[\\\"dynamicTclPreview\\\"].setValue(n\[\\\"dynamicTclValue\\\"].value())\")\np.addNotepad(\"Explanation\", \"Add a code in the updateUI knob to update the Node's properties tab each time something changes. In this example, update the text label value with the current evaluation of other string knob, that may contain a TCL expression. In this way we can evaluate the current value of the TCL expression and preview it in another knob string or label.\")\nret = p.show()"}
+ addUserKnob {20 dynamic l Dynamic t "Dynamic Knob utils"}
+ addUserKnob {1 inputText l Input}
+ inputText Example4
+ addUserKnob {22 add t "Adds a knob in a specficic possition of the node." -STARTLINE T "def insertKnobs(node, knobNameRef, knobList):\n    \"\"\"Insert a list of given knobs in order after a given knob name.\n\n    Args:\n        node (:obj:`nuke.Node`): The node where the knobs have to be added.\n        knobNameRef (str): The name of the knob of reference.\n\t\t\t\t\t\tThe new knobs will be inserted after it.\n        knobList (list of :obj:`nuke.Knob`): The list of knobs to add.\n        \n\n    \"\"\"\n    knobBackupList = \[]\n    makeBackup = False\n    # Save the knobs that are after the reference knob\n    tabKnob = None\n    for k in node.allKnobs():\n        if not makeBackup and k.Class() == \"Tab_Knob\":\n            tabKnob = k\n        if makeBackup:\n            knobBackupList.append(k)\n        elif k.name() == knobNameRef:\n            makeBackup = True\n    # Remove the knobs\n    for k in knobBackupList:\n        node.removeKnob(k)\n    # Add the new knobs\n    for newKnob in knobList:\n        node.addKnob(newKnob)\n    # Restore the backup of the removed knobs now.\n    for k in knobBackupList:\n        node.addKnob(k)\n    # Restore the current tab like the active one. If you don't active the tab in someway, \n    # the properties panel will open the last knob because of the remove and restore process\n    tabKnob.setFlag(0)\n        \n        \n# Add knob\nn = nuke.thisNode()\nColorKnob = nuke.AColor_Knob(n\[\"inputText\"].value())\ninsertKnobs(n, \"add\", \[ColorKnob])"}
+ addUserKnob {6 Example4_panelDropped l "panel dropped state" +HIDDEN +STARTLINE}
+ addUserKnob {19 Example2}
+ Example2 {0 0 0 0}
+ addUserKnob {6 Example2_panelDropped l "panel dropped state" -STARTLINE +HIDDEN}
+ addUserKnob {19 Example}
+ Example {0 0 0 0}
+ addUserKnob {6 Example_panelDropped l "panel dropped state" -STARTLINE +HIDDEN}
+ addUserKnob {20 jhi_help l Help t "Information about the Node."}
+ addUserKnob {26 jhi_info l "" +STARTLINE T "NodeExample v0.1.0 - Node develop by Jorge Hernandez (JorgeHI)"}
+ addUserKnob {26 jhi_contact l "" +STARTLINE T "\n<font color=\"grey\">For asistance or bug report contact: info@jorgehi.com\n</font>"}
+ addUserKnob {22 jhi_nukepedia l Nukepedia -STARTLINE T "nukescripts.start(\"https://www.nukepedia.com/gizmos/other/nodeExample\")"}
+ addUserKnob {20 jhi_config l config +INVISIBLE}
+ addUserKnob {1 jhi_name}
+ jhi_name nodeExample
+ addUserKnob {1 jhi_version}
+ jhi_version 0.1.0
+}
